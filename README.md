@@ -52,9 +52,9 @@ L’objectif est de **tester la méthode dans des contextes civils et académiqu
 
 1. **Ouvrir le notebook dans Colab** en cliquant sur le badge ci-dessus ou copier le code ci-dessous dans votre notebook colab.
 2. **Authentification Google Earth Engine** : suivre le lien généré par `ee.Authenticate()` et copier le code.
-3. **Remplir les paramètres utilisateur** (zone, footprints, dates, seuils, export, affichage).
+3. **Remplir les paramètres utilisateur** (zone, footprints, dates, seuils, export, affichage).ℹ️ Données de test disponibles : dans le dossier GEE_data du dépôt, l’utilisateur trouvera des données sur Gaziantep, incluant la zone AOI (mask_gazientep) et la couche bâtiments (building_gazientep)
 4. **Exécuter les cellules dans l’ordre**. Le module `pwtt.py` est cloné et chargé automatiquement.
-ℹ️ Données de test disponibles : dans le dossier GEE_data du dépôt, l’utilisateur trouvera des données sur Gaziantep, incluant la zone AOI (mask_gazientep) et la couche bâtiments (building_gazientep)
+
 
 ---
 
