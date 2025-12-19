@@ -76,28 +76,113 @@ La méthode repose sur l’utilisation des **images radar Sentinel-1** pour dét
 
 1. **Connexion à Google Earth Engine**
 ```python
-import ee
+# ============================================================
+# 🔹 Supprimer l'ancien dossier (optionnel)
+# ============================================================
+import shutil, os
+repo_path = "/content/test_pwtt"
+if os.path.exists(repo_path):
+    shutil.rmtree(repo_path)
+
+# ============================================================
+# 🔹 Cloner le dépôt GitHub contenant pwtt.py
+# ============================================================
+!git clone https://github.com/renouxfabrice/test_pwtt.git
+
+# ============================================================
+# 🔹 Définir le chemin vers pwtt.py et l'importer
+# ============================================================
+pwtt_path = "/content/test_pwtt/code/pwtt.py"
+
+import sys, importlib.util
+
+# Forcer le rechargement si déjà importé
+if 'pwtt' in sys.modules:
+    del sys.modules['pwtt']
+
+spec = importlib.util.spec_from_file_location("pwtt", pwtt_path)
+pwtt = importlib.util.module_from_spec(spec)
+sys.modules["pwtt"] = pwtt
+spec.loader.exec_module(pwtt)
+print("🚀 Module pwtt chargé avec succès !")
+
+
+# ============================================================
+# 🔹 Imports nécessaires
+# ============================================================
+import ee, geemap, ipywidgets as widgets, datetime
+
+# 1️⃣ Authentification Google Earth Engine
 ee.Authenticate()
-ee.Initialize()
+ee.Initialize(project='pwtt-test')         # Remplacer par le nom de votre projet sur GEE
 
-    Importer votre zone d’intérêt (AOI)
+# ============================================================
+# 🔹 Paramètres utilisateur à remplir
+# ============================================================
 
-import geopandas as gpd
-aoi = ee.Geometry.Polygon([ ... ])
+# 1️⃣ Zone d'étude (AOI) : une FeatureCollection qui délimite la zone à analyser
+zone = ee.FeatureCollection('projects/pwtt-test/assets/mask_gazientep')
 
-    Appeler la fonction principale
+# 2️⃣ Footprints : bâtiments ou objets à analyser
+footprints = ee.FeatureCollection('projects/pwtt-test/assets/bulding_gazientep')
 
-image_result = filter_s1(
-    aoi=aoi,
-    event_date='2025-01-01',
-    pre_date='2024-01-01',
-    pre_interval=12,
-    post_interval=2,
-    footprints=footprints_fc,  # facultatif
-    export_raster=True,
-    export_footprint_csv=True,
-    show_raster=True
+# 3️⃣ Dates
+pre_date = '2023-02-05'       # Date avant l'événement (ex. début des observations pré-event)
+event_date = '2023-02-06'     # Date de l'événement ou post-event
+
+# 4️⃣ Intervalles de temps (en mois)
+pre_interval = 6               # Combien de mois avant l'événement pour la période pré-event
+post_interval = 1              # Combien de mois après l'événement pour la période post-event
+
+# 5️⃣ Export / affichage
+export_dir = 'PWTT_TURQUIE_Export'  # Dossier sur Google Drive pour enregistrer les exports
+export_name = 'Gazientep_damage'     # Nom de base pour les fichiers exportés
+
+export_footprint_csv = False          # Export des footprints en CSV
+export_footprint_geojson = False     # Export des footprints en GeoJSON
+export_grid = False                  # Export de la grille CSV
+export_raster = False                # Export du raster T_statistic
+export_scale = 500                   # Résolution d'export (en mètres)
+
+# 6️⃣ Paramètres d'analyse
+urban_threshold = 0.1                # Seuil pour filtrer sur les zones urbanisées
+T_threshold = 3                       # Seuil T-statistic pour définir les damages
+apply_terrain_flattening = False      # True si on veut corriger le signal sur les pentes
+TERRAIN_FLATTENING_MODEL = 'VOLUME'  # Modèle de correction ('VOLUME' ou 'DIRECT')
+DEM = ee.Image('USGS/SRTMGL1_003')   # Modèle numérique de terrain pour correction
+TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER = 0  # Buffer supplémentaire en m
+
+# 7️⃣ Affichage dans Colab
+show_raster = True       # True pour voir le raster T_statistic
+show_footprints = False  # True pour voir les footprints colorés
+
+# ============================================================
+# 🔹 Appel de la fonction filter_s1
+# ============================================================
+image = pwtt.filter_s1(
+    aoi=zone,
+    footprints=footprints,
+    pre_date=pre_date,
+    event_date=event_date,
+    pre_interval=pre_interval,
+    post_interval=post_interval,
+    export_dir=export_dir,
+    export_name=export_name,
+    export_footprint_csv=export_footprint_csv,
+    export_footprint_geojson=export_footprint_geojson,
+    export_grid=export_grid,
+    export_raster=export_raster,
+    export_scale=export_scale,
+    urban_threshold=urban_threshold,
+    T_threshold=T_threshold,
+    apply_terrain_flattening=apply_terrain_flattening,
+    TERRAIN_FLATTENING_MODEL=TERRAIN_FLATTENING_MODEL,
+    DEM=DEM,
+    TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER=TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER,
+    show_raster=show_raster,
+    show_footprints=show_footprints
 )
+
 
     Visualiser ou exporter
 
