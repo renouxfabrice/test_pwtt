@@ -183,7 +183,7 @@ image = pwtt.filter_s1(
     show_footprints=show_footprints
 )
 
-```python
+```
     Visualiser ou exporter
 
     Les exports se font automatiquement sur Google Drive.
