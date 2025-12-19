@@ -7,7 +7,7 @@
 2025-03-19
 
 ## Contexte
-Ce projet est une adaptation étudiante du **Personalized Weighted T-Test (PWTT)** développé par **Dr. Ollie Ballinger**.  
+Ce projet est une adaptation étudiante du **Pixel-Wise T-Test T-Test (PWTT)** développé par **Dr. Ollie Ballinger**.  
 Le code original est disponible ici : [PWTT GitHub](https://github.com/oballinger/PWTT)
 
 L’objectif de cette adaptation est de **tester la méthode dans des contextes autres que militaires**, par exemple pour :
