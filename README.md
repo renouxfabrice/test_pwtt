@@ -3,7 +3,7 @@
 
 ## Auteur
 
-**Fabrice RENOUX** – Étudiant SILAT
+**Fabrice RENOUX** – Étudiant / Chercheur en géomatique
 
 ## Date
 
@@ -14,57 +14,24 @@
 Ce projet est une **adaptation étudiante** du **Pixel-Wise T-Test (PWTT)** développé par **Dr. Ollie Ballinger**.
 Le code original est disponible ici : [PWTT GitHub](https://github.com/oballinger/PWTT)
 
-L’objectif de cette adaptation est de **tester la méthode dans des contextes civils et académiques**, par exemple pour :
+L’objectif est de **tester la méthode dans des contextes civils et académiques**, par exemple pour :
 
 * Catastrophes naturelles (séismes, inondations, cyclones)
 * Explosions ou incidents industriels
 * Études urbaines de changement rapide
 
-> ⚠️ Ceci est un travail académique, non opérationnel, à usage pédagogique et expérimental.
+> ⚠️ Usage pédagogique uniquement, non opérationnel.
 
 ---
 
 ## Démarche et méthodologie
 
-La méthode repose sur l’utilisation des **images radar Sentinel-1** pour détecter les changements sur le territoire avant et après un événement.
-
-### 1. Prétraitement des images Sentinel-1
-
-* Filtre **Lee** pour réduire le **bruit radar (speckle)** tout en conservant les contours.
-* Conversion en logarithme pour homogénéiser les valeurs.
-* Option : **correction topographique (terrain flattening)** pour réduire les effets de pente et d’ombre radar.
-
-### 2. Test statistique T (PWTT)
-
-* Pour chaque pixel, comparaison des images **avant et après événement**.
-* Calcul de la **moyenne, écart-type et nombre d’observations** pour chaque période.
-* Calcul d’un **T-statistic pixel par pixel** pour détecter les changements significatifs.
-* Possibilité de filtrer par **zones urbaines** pour ne garder que les zones bâties (Dynamic World).
-
-### 3. Agrégation par orbites
-
-* Les images Sentinel-1 sont regroupées par **orbites relatives** pour éviter les biais liés à l’angle de prise de vue.
-* Chaque orbite est traitée indépendamment avant fusion des résultats.
-
-### 4. Post-traitement et analyse spatiale
-
-* Convolution spatiale autour de chaque pixel pour ajouter le **contexte local** (50m, 100m, 150m).
-* Détermination d’une **classe de dommage** selon un seuil `T_threshold`.
-* Production de la **carte finale** `T_statistic` et du raster `damage`.
-
-### 5. Analyse par footprint (optionnel)
-
-* Si des footprints (bâtiments, zones d’intérêt) sont fournis :
-
-  * Extraction des statistiques pour chaque entité.
-  * Calcul de **surface, nombre de pixels endommagés, proportion endommagée**.
-  * Classement en **niveau de confiance** (0 à 3).
-
-### 6. Export et visualisation
-
-* **Raster** : T-statistic ou damage
-* **Tableaux** : CSV / GeoJSON par bâtiment
-* **Affichage interactif** via `geemap` (optionnel)
+1. **Prétraitement Sentinel-1** : Filtre Lee, conversion logarithmique, correction topographique optionnelle.
+2. **Test statistique T (PWTT)** : Comparaison pixel par pixel avant/après événement.
+3. **Agrégation par orbites** : Éviter les biais liés aux angles de prise de vue.
+4. **Post-traitement** : Convolutions spatiales, définition des classes de dommage.
+5. **Analyse par footprint** : Statistiques pour chaque bâtiment ou entité (optionnel).
+6. **Export et visualisation** : Raster, CSV, GeoJSON, affichage interactif via `geemap`.
 
 ---
 
@@ -79,38 +46,117 @@ La méthode repose sur l’utilisation des **images radar Sentinel-1** pour dét
 
 ## Utilisation dans Google Colab
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/renouxfabrice/test_pwtt/blob/main/notebooks/pwtt_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/renouxfabrice/test_pwtt/code/pwtt_colab.ipynb)
 
 ### Étapes pour l’utilisateur
 
-1. **Ouvrir le notebook dans Colab**
-   Cliquer sur le badge ci-dessus depuis GitHub.
-
-2. **Authentification Google Earth Engine**
-   La première fois, tu devras autoriser Colab à accéder à ton compte GEE.
-   Suivre le lien généré par `ee.Authenticate()` et copier le code d’authentification.
-
-3. **Remplir les paramètres utilisateur**
-
-   * `zone` : FeatureCollection de la zone d’étude (AOI).
-   * `footprints` : FeatureCollection des bâtiments ou objets à analyser (facultatif).
-   * `pre_date` et `event_date` : dates avant et après l’événement.
-   * `pre_interval` et `post_interval` : intervalles de temps en mois.
-   * `export_dir` et `export_name` : dossier et nom pour sauvegarder les exports sur Google Drive.
-   * `urban_threshold` et `T_threshold` : seuils pour filtrer l’urbanisation et définir les pixels « damaged ».
-   * `apply_terrain_flattening` : True pour correction sur pente, sinon False.
-   * `show_raster` / `show_footprints` : contrôle l’affichage dans Colab.
-
-4. **Exécution**
-   Exécuter les cellules dans l’ordre.
-   Le module `pwtt.py` est cloné automatiquement depuis GitHub et chargé.
-   Le résultat final est une image contenant les statistiques T, les zones de dommages et les convolutions spatiales.
+1. **Ouvrir le notebook dans Colab** en cliquant sur le badge ci-dessus ou copier le code ci-dessous dans votre notebook colab.
+2. **Authentification Google Earth Engine** : suivre le lien généré par `ee.Authenticate()` et copier le code.
+3. **Remplir les paramètres utilisateur** (zone, footprints, dates, seuils, export, affichage).
+4. **Exécuter les cellules dans l’ordre**. Le module `pwtt.py` est cloné et chargé automatiquement.
+ℹ️ Données de test disponibles : dans le dossier GEE_data du dépôt, l’utilisateur trouvera des données sur Gaziantep, incluant la zone AOI (mask_gazientep) et la couche bâtiments (building_gazientep)
 
 ---
 
-### Visualisation et export
+## Exemple de code complet à copier dans Colab
 
-* Les exports se font automatiquement sur Google Drive dans le dossier défini par `export_dir`.
+```python
+# ============================================================
+# 🔹 Supprimer l'ancien dossier (optionnel)
+# ============================================================
+import shutil, os
+repo_path = "/content/test_pwtt"
+if os.path.exists(repo_path):
+    shutil.rmtree(repo_path)
+
+# ============================================================
+# 🔹 Cloner le dépôt GitHub contenant pwtt.py
+# ============================================================
+!git clone https://github.com/renouxfabrice/test_pwtt.git
+
+# ============================================================
+# 🔹 Définir le chemin vers pwtt.py et l'importer
+# ============================================================
+pwtt_path = "/content/test_pwtt/code/pwtt.py"
+import sys, importlib.util
+
+# Forcer le rechargement si déjà importé
+if 'pwtt' in sys.modules:
+    del sys.modules['pwtt']
+
+spec = importlib.util.spec_from_file_location("pwtt", pwtt_path)
+pwtt = importlib.util.module_from_spec(spec)
+sys.modules["pwtt"] = pwtt
+spec.loader.exec_module(pwtt)
+print("🚀 Module pwtt chargé avec succès !")
+
+# ============================================================
+# 🔹 Imports nécessaires
+# ============================================================
+import ee, geemap, ipywidgets as widgets, datetime
+
+# 1️⃣ Authentification Google Earth Engine
+ee.Authenticate()
+ee.Initialize(project='pwtt-test')
+
+# ============================================================
+# 🔹 Paramètres utilisateur à remplir
+# ============================================================
+zone = ee.FeatureCollection('projects/pwtt-test/assets/mask_gazientep')
+footprints = ee.FeatureCollection('projects/pwtt-test/assets/bulding_gazientep')
+pre_date = '2023-02-05'
+event_date = '2023-02-06'
+pre_interval = 6
+post_interval = 1
+export_dir = 'PWTT_TURQUIE_Export'
+export_name = 'Gazientep_damage'
+export_footprint_csv = False
+export_footprint_geojson = False
+export_grid = False
+export_raster = False
+export_scale = 500
+urban_threshold = 0.1
+T_threshold = 3
+apply_terrain_flattening = False
+TERRAIN_FLATTENING_MODEL = 'VOLUME'
+DEM = ee.Image('USGS/SRTMGL1_003')
+TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER = 0
+show_raster = True
+show_footprints = False
+
+# ============================================================
+# 🔹 Appel de la fonction filter_s1
+# ============================================================
+image = pwtt.filter_s1(
+    aoi=zone,
+    footprints=footprints,
+    pre_date=pre_date,
+    event_date=event_date,
+    pre_interval=pre_interval,
+    post_interval=post_interval,
+    export_dir=export_dir,
+    export_name=export_name,
+    export_footprint_csv=export_footprint_csv,
+    export_footprint_geojson=export_footprint_geojson,
+    export_grid=export_grid,
+    export_raster=export_raster,
+    export_scale=export_scale,
+    urban_threshold=urban_threshold,
+    T_threshold=T_threshold,
+    apply_terrain_flattening=apply_terrain_flattening,
+    TERRAIN_FLATTENING_MODEL=TERRAIN_FLATTENING_MODEL,
+    DEM=DEM,
+    TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER=TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER,
+    show_raster=show_raster,
+    show_footprints=show_footprints
+)
+```
+
+---
+
+## Visualisation et export
+
+* Exports automatiques sur Google Drive (`export_dir`).
 * Affichage interactif possible avec `show_raster=True` et `show_footprints=True`.
 
 ---
@@ -118,19 +164,15 @@ La méthode repose sur l’utilisation des **images radar Sentinel-1** pour dét
 ## Références
 
 * Ballinger, O. (2020) – PWTT GitHub
-* Vollrath, A., Mullissa, A., & Reiche, J. (2020). Angular-Based Radiometric Slope Correction for Sentinel-1. *Remote Sensing*, 12(11), 1867. doi:10.3390/rs12111867
+* Vollrath, A., Mullissa, A., & Reiche, J. (2020). Angular-Based Radiometric Slope Correction for Sentinel-1. *Remote Sensing*, 12(11), 1867.
 
 ---
 
 ## Notes importantes
 
-* Ce code est **entièrement reproductible, transparent et explicite**.
-* Les résultats dépendent fortement de :
-
-  * Qualité et disponibilité des images Sentinel-1
-  * Paramètres `pre_interval`, `post_interval`, `T_threshold`
-  * Taille des footprints et couverture urbaine
-* Pour un usage pédagogique, il est conseillé de tester sur une **petite zone d’intérêt** avant d’exécuter des exports globaux.
+* Reproductible, transparent et explicite.
+* Dépend fortement de la qualité des images Sentinel-1, des paramètres `pre_interval`, `post_interval`, `T_threshold`, et de la taille des footprints.
+* Tester sur une **petite zone** avant une exportation globale.
 
 ---
 
