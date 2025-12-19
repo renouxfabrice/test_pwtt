@@ -3,7 +3,7 @@
 
 ## Auteur
 
-**Fabrice RENOUX** – Étudiant / Chercheur en géomatique
+**Fabrice RENOUX** – Étudiant SILAT
 
 ## Date
 
