@@ -1,0 +1,435 @@
+import datetime
+import ee
+import geemap
+import datetime 
+
+
+def lee_filter(image):
+    KERNEL_SIZE = 2
+    band_names = image.bandNames().remove('angle')
+
+    # S1-GRD images are multilooked 5 times in range
+    enl = 5
+
+    # Compute the speckle standard deviation
+    eta = 1.0 / enl ** 0.5
+    eta = ee.Image.constant(eta)
+
+    # MMSE estimator
+    # Neighbourhood mean and variance
+    one_img = ee.Image.constant(1)
+
+    reducers = ee.Reducer.mean().combine(
+        reducer2=ee.Reducer.variance(),
+        sharedInputs=True
+    )
+    stats = image.select(band_names).reduceNeighborhood(
+        reducer=reducers,
+        kernel=ee.Kernel.square(KERNEL_SIZE / 2, 'pixels'),
+        optimization='window'
+    )
+
+    mean_band = band_names.map(lambda band_name: ee.String(band_name).cat('_mean'))
+    var_band = band_names.map(lambda band_name: ee.String(band_name).cat('_variance'))
+
+    z_bar = stats.select(mean_band)
+    varz = stats.select(var_band)
+
+    # Estimate weight
+    varx = (varz.subtract(z_bar.pow(2).multiply(eta.pow(2)))).divide(one_img.add(eta.pow(2)))
+    b = varx.divide(varz)
+
+    # If b is negative, set it to zero
+    new_b = b.where(b.lt(0), 0)
+
+    output = one_img.subtract(new_b).multiply(z_bar.abs()).add(new_b.multiply(image.select(band_names)))
+    output = output.rename(band_names)
+
+    return image.addBands(output, None, True)
+
+
+
+def ttest(s1, event_date, pre_date, pre_interval, post_interval):
+    # Convert the event_date date to a date object
+    event_date = ee.Date(event_date)
+
+    # Filter the image collection to the pre-event period
+    pre = s1.filterDate(
+        pre_date.advance(ee.Number(pre_interval).multiply(-1), "month"),
+        pre_date
+    )
+
+    # Filter the image collection to the post-event period
+    post = s1.filterDate(event_date, event_date.advance(post_interval, "month"))
+
+    # Calculate the mean, standard deviation, and number of images for the pre-event period
+    pre_mean = pre.mean()
+    pre_sd = pre.reduce(ee.Reducer.stdDev())
+    #pre_n = pre.count()
+    pre_n = ee.Number(pre.aggregate_array('orbitNumber_start').distinct().size());
+    
+    # Calculate the mean, standard deviation, and number of images for the pre-event period
+    post_mean = post.mean()
+    post_sd = post.reduce(ee.Reducer.stdDev())
+    #post_n = post.count()
+    post_n = ee.Number(post.aggregate_array('orbitNumber_start').distinct().size());
+
+    # Calculate the pooled standard deviation
+    pooled_sd = (pre_sd.pow(2)
+                 .multiply(pre_n.subtract(1))
+                 .add(post_sd.pow(2).multiply(post_n.subtract(1)))).divide(pre_n.add(post_n).subtract(2)).sqrt()
+
+    # Calculate the denominator of the t-test
+    denom = pooled_sd.multiply(
+        ee.Image(1).divide(pre_n).add(ee.Image(1).divide(post_n)).sqrt()
+    )
+
+    # Calculate the Degrees of Freedom, which is the number of observations minus 2
+    df = pre_n.add(post_n).subtract(2)
+    # Calculate the t-test using the mean of the pre-event period, the mean of the post-event period, and the pooled standard deviation
+    change = post_mean.subtract(pre_mean).divide(denom).abs()
+
+    # Return the t-values for each pixel
+    return change
+
+#def filter_s1(aoi,event_date,war_start, pre_interval=12, post_interval=2, footprints=None, viz=False, export=False,  export_dir='PWTT_Export', export_name=None, export_scale=10, grid_scale=500, export_grid=False,urban_threshold=0.1,T_threshold=3 ):
+
+def filter_s1(
+    aoi, event_date, pre_date,
+    pre_interval=12, post_interval=2,
+    footprints=None, export_footprint_csv=False, export_footprint_geojson=False,
+    grid_scale=500, export_grid=False,
+    export_raster=False, export_scale=10,
+    export_dir='PWTT_Export', export_name=None,
+    urban_threshold=0.1, T_threshold=3,
+    apply_terrain_flattening=False,
+    TERRAIN_FLATTENING_MODEL='VOLUME',
+    DEM=None,
+    TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER=0,
+    show_raster=False,       # Booléen pour afficher le raster
+    show_footprints=False    # Booléen pour afficher les footprints
+):
+    
+    event_date = ee.Date(event_date)
+    pre_date = ee.Date(pre_date)
+
+    # Liste des orbites
+    orbits = ee.ImageCollection("COPERNICUS/S1_GRD_FLOAT") \
+        .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH")) \
+        .filter(ee.Filter.eq("instrumentMode", "IW")) \
+        .filterBounds(aoi) \
+        .filterDate(event_date, event_date.advance(post_interval, 'months')) \
+        .aggregate_array('relativeOrbitNumber_start') \
+        .distinct()
+
+    # Filtrage par orbite + Lee filter
+
+    def map_orbit(orbit):
+        # Récupération des images Sentinel-1 pour l'orbite
+        s1 = ee.ImageCollection("COPERNICUS/S1_GRD_FLOAT") \
+            .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH")) \
+            .filter(ee.Filter.eq("instrumentMode", "IW")) \
+            .filter(ee.Filter.eq("relativeOrbitNumber_start", orbit)) \
+            .map(lee_filter) \
+            .map(lambda img: img.log()) \
+            .filterBounds(aoi)
+
+        # Appliquer le terrain flattening si demandé
+        if apply_terrain_flattening and DEM is not None:
+            s1 = terrain_flattening(
+                collection=s1,
+                TERRAIN_FLATTENING_MODEL=TERRAIN_FLATTENING_MODEL,
+                DEM=DEM,
+                TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER=TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER
+            )
+
+        # Sélectionner uniquement VV et VH pour le T-test
+        s1_bands = s1.select(['VV', 'VH'])
+
+        # Calcul du T-test
+        return ttest(s1_bands, event_date, pre_date, pre_interval, post_interval)
+
+    # Image de référence urbanisation
+    urban = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate(
+        pre_date.advance(-1 * pre_interval, 'months'), pre_date).select('built').mean()
+
+    # Calcul du T-test et bandes dérivées
+    image = ee.ImageCollection(orbits.map(map_orbit)).max()
+    image = image.addBands(image.select('VV').max(image.select('VH')).rename('max_change')).select('max_change')
+    image = image.focalMedian(10, 'gaussian', 'meters').clip(aoi).updateMask(urban.gt(urban_threshold))
+
+    # Convolutions
+    k50 = image.convolve(ee.Kernel.circle(50,'meters',True)).rename('k50')
+    k100 = image.convolve(ee.Kernel.circle(100,'meters',True)).rename('k100')
+    k150 = image.convolve(ee.Kernel.circle(150,'meters',True)).rename('k150')
+    
+    # Damage selon T_threshold
+    damage = image.select('max_change').gt(T_threshold).rename('damage')
+    image = image.addBands(damage)
+    image = image.addBands([k50, k100, k150])
+    image = image.addBands(
+        (image.select('max_change').add(k50).add(k100).add(k150).divide(4)).rename('T_statistic')
+    )
+    image = image.select('T_statistic', 'damage', 'k50', 'k100', 'k150', 'max_change').toFloat().clip(aoi)
+
+    # Export grille
+    if export_grid:
+        grid = aoi.geometry().bounds().coveringGrid('EPSG:3857', grid_scale)
+        grid = image.reduceRegions(
+            collection=grid,
+            reducer=ee.Reducer.mean(),
+            scale=10,
+            tileScale=8
+        )
+        def enrich_grid(f):
+            T = ee.Algorithms.If(ee.Algorithms.IsEqual(f.get('T_statistic'), None), 0, f.get('T_statistic'))
+            return f.set({'class': ee.Number(T).gt(T_threshold).int()})
+        grid = grid.map(enrich_grid)
+
+        task_grid = ee.batch.Export.table.toDrive(
+            collection=grid,
+            description=f"{export_name}_grid",
+            folder=export_dir,
+            fileFormat='CSV'
+        )
+        task_grid.start()
+
+    # Export footprints
+    if footprints is not None:
+        fc = ee.FeatureCollection(footprints).filterBounds(aoi)
+        
+        # réduire l'image sur les footprints
+        fp = image.reduceRegions(
+            collection=fc,
+            reducer=ee.Reducer.mean()
+                    .combine(ee.Reducer.count(), sharedInputs=True)
+                    .combine(ee.Reducer.sum(), sharedInputs=True),
+            scale=10,
+            tileScale=8
+        )
+        
+
+        def enrich_fp(f):
+            # Aire du bâtiment (m²)
+            area = f.geometry().area()
+
+            # Statistique T
+            T = ee.Number(
+                ee.Algorithms.If(
+                    ee.Algorithms.IsEqual(f.get('T_statistic_mean'), None),
+                    0,
+                    f.get('T_statistic_mean')
+                )
+            )
+
+            # Nombre de pixels dans le footprint
+            n_pix = ee.Number(
+                ee.Algorithms.If(
+                    ee.Algorithms.IsEqual(f.get('T_statistic_count'), None),
+                    0,
+                    f.get('T_statistic_count')
+                )
+            )
+
+            # Nombre de pixels "damage"
+            dmg = ee.Number(
+                ee.Algorithms.If(
+                    ee.Algorithms.IsEqual(f.get('damage_sum'), None),
+                    0,
+                    f.get('damage_sum')
+                )
+            )
+
+            # Confidence = proportion de pixels damage
+            confidence = ee.Number(
+                ee.Algorithms.If(n_pix.gt(0), dmg.divide(n_pix), 0)
+            )
+
+            confidence_class = ee.Number(
+                ee.Algorithms.If(confidence.lt(0.1), 0,
+                ee.Algorithms.If(confidence.lt(0.3), 1,
+                ee.Algorithms.If(confidence.lt(0.6), 2, 3)))
+            )
+
+            return (
+                f.select(['name', 'osm_id', 'osm_type'])  # 🔹 on garde seulement ces champs OSM
+                 .set({
+                    'area': area,
+                    'T_statistic': T,
+                    'class': T.gt(T_threshold).int(),
+                    'damage': T.gt(T_threshold).int(),
+                    'n_pixel': n_pix,
+                    'damage_pts': dmg,
+                    'confidence': confidence,
+                    'confidence_class': confidence_class,
+                    'k50': f.get('k50_mean'),
+                    'k100': f.get('k100_mean'),
+                    'k150': f.get('k150_mean'),
+                    'max_change': f.get('max_change_mean')
+                 })
+            )
+
+        
+        
+        fp = fp.map(enrich_fp)
+        fp_vis = fp
+
+        if export_footprint_csv:
+        # Exporter dans les deux formats
+            for fmt in ['CSV']:
+                task_fp = ee.batch.Export.table.toDrive(
+                    collection=fp,
+                    description=f"{export_name}_footprints_{fmt}",
+                    folder=export_dir,
+                    fileFormat=fmt
+                )
+                task_fp.start()
+
+        if export_footprint_geojson:
+        # Exporter dans les deux formats
+            for fmt in ['GEOJSON']:
+                task_fp = ee.batch.Export.table.toDrive(
+                    collection=fp,
+                    description=f"{export_name}_footprints_{fmt}",
+                    folder=export_dir,
+                    fileFormat=fmt
+                )
+                task_fp.start()
+
+
+
+    # Export raster
+    if export_raster:
+        task = ee.batch.Export.image.toDrive(
+            image=image.select('T_statistic'),
+            description=f"{export_name}_raster",
+            folder=export_dir,
+            scale=export_scale,
+            maxPixels=1e13
+        )
+        task.start()
+
+
+# =========================
+    # 🔹 Affichage facultatif
+    # =========================
+    if show_raster or show_footprints:
+        Map = geemap.Map()
+        Map.add_basemap('SATELLITE')
+        Map.centerObject(aoi, 12)
+        
+        # Raster
+        if show_raster:
+            Map.addLayer(
+                image.select('T_statistic'),
+                {'min': 3, 'max': 5, 'palette': ['yellow', 'red', 'purple']},
+                'Damage T-stat'
+            )
+        
+        # Footprints
+        if show_footprints and footprints is not None:
+            # Vert = class 0, Rouge = class 1, contours seulement
+            class_0 = fp_vis.filter(ee.Filter.eq('class', 0))
+            class_1 = fp_vis.filter(ee.Filter.eq('class', 1))
+            
+            Map.addLayer(class_0.style(color='00FF00', fillColor='00000000', width=2), {}, 'Footprint Class 0')
+            Map.addLayer(class_1.style(color='FF0000', fillColor='00000000', width=2), {}, 'Footprint Class 1')
+
+        display(Map)
+
+
+        
+
+    return image
+
+
+
+
+
+def terrain_flattening(collection, TERRAIN_FLATTENING_MODEL, DEM, TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER):
+    '''
+    Terrain Flattening
+
+    Vollrath, A., Mullissa, A., & Reiche, J. (2020). Angular-Based Radiometric Slope Correction for Sentinel-1 on Google Earth Engine. 
+    Remote Sensing, 12(11), [1867]. https://doi.org/10.3390/rs12111867
+
+    '''
+
+    ninetyRad = ee.Image.constant(90).multiply(3.14159265359 / 180)
+
+    def volumetric_model_SCF(theta_iRad, alpha_rRad):
+        nominator = (ninetyRad.subtract(theta_iRad).add(alpha_rRad)).tan()
+        denominator = (ninetyRad.subtract(theta_iRad)).tan()
+        return nominator.divide(denominator)
+
+    def direct_model_SCF(theta_iRad, alpha_rRad, alpha_azRad):
+        nominator = (ninetyRad.subtract(theta_iRad)).cos()
+        denominator = alpha_azRad.cos().multiply((ninetyRad.subtract(theta_iRad).add(alpha_rRad)).cos())
+        return nominator.divide(denominator)
+
+    def erode(image, distance):
+        d = (image.Not().unmask(1)
+             .fastDistanceTransform(30).sqrt()
+             .multiply(ee.Image.pixelArea().sqrt()))
+        return image.updateMask(d.gt(distance))
+
+    def masking(alpha_rRad, theta_iRad, buffer):
+        layover = alpha_rRad.lt(theta_iRad).rename('layover')
+        shadow = alpha_rRad.gt(ee.Image.constant(-1).multiply(ninetyRad.subtract(theta_iRad))).rename('shadow')
+        mask = layover.And(shadow)
+        if buffer > 0:
+            mask = erode(mask, buffer)
+        return mask.rename('no_data_mask')
+
+    def correct(image):
+        bandNames = image.bandNames()
+        geom = image.geometry()
+
+        # Récupérer la projection correctement
+        proj = image.select(0).projection()  # première bande
+        proj_crs = proj.crs()  # juste la chaîne CRS
+
+        # DEM reprojeté
+        elevation = DEM.resample('bilinear').reproject(
+            crs=proj_crs,
+            scale=10
+        ).clip(geom)
+
+        heading = ee.Terrain.aspect(image.select('VV')).reduceRegion(
+            ee.Reducer.mean(), geom, 1000
+        ).get('aspect')
+
+        heading = ee.Number(heading)
+        heading = ee.Algorithms.If(heading.gt(180), heading.subtract(360), heading)
+        heading = ee.Image.constant(heading)
+
+        theta_iRad = image.select('VV').multiply(3.14159265359 / 180)
+        phi_iRad = heading.multiply(3.14159265359 / 180)
+
+        alpha_sRad = ee.Terrain.slope(elevation).select('slope').multiply(3.14159265359 / 180)
+
+        aspect = ee.Terrain.aspect(elevation).select('aspect').clip(geom)
+        aspect_minus = aspect.updateMask(aspect.gt(180)).subtract(360)
+        phi_sRad = aspect.updateMask(aspect.lte(180)).unmask().add(aspect_minus.unmask())\
+            .multiply(-1).multiply(3.14159265359 / 180)
+
+        phi_rRad = phi_iRad.subtract(phi_sRad)
+        alpha_rRad = (alpha_sRad.tan().multiply(phi_rRad.cos())).atan()
+        alpha_azRad = (alpha_sRad.tan().multiply(phi_rRad.sin())).atan()
+
+        gamma0 = image.divide(theta_iRad.cos())
+
+        if TERRAIN_FLATTENING_MODEL == 'VOLUME':
+            scf = volumetric_model_SCF(theta_iRad, alpha_rRad)
+        elif TERRAIN_FLATTENING_MODEL == 'DIRECT':
+            scf = direct_model_SCF(theta_iRad, alpha_rRad, alpha_azRad)
+
+        gamma0_flat = gamma0.multiply(scf)
+        mask = masking(alpha_rRad, theta_iRad, TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER)
+
+        output = gamma0_flat.mask(mask).rename(bandNames).copyProperties(image)
+        return output.set('system:time_start', image.get('system:time_start'))
+
+    return collection.map(correct)
+
+
