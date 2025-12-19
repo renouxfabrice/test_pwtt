@@ -1,7 +1,7 @@
 # PWTT – Adaptation Étudiante pour l’Analyse de Changements Sentinel-1
 
 ## Auteur
-**Fabrice [Nom]** – Étudiant / Chercheur en géomatique
+**Fabrice RENOUX ** – Étudiant / Chercheur en géomatique
 
 ## Date
 2025-03-19
