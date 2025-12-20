@@ -102,9 +102,6 @@ ee.Initialize(project='Nom_de_ton_projet_GEE')
 # ============================================================
 # 🔹 Paramètres utilisateur à remplir
 # ============================================================
-# ============================================================
-# 🔹 Paramètres utilisateur à remplir
-# ============================================================
 
 zone = ee.FeatureCollection(
     'projects/Nom_de_ton_projet_GEE/assets/mask_gazientep'
