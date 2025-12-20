@@ -95,34 +95,89 @@ print("Module pwtt chargé avec succès !")
 # ============================================================
 import ee, geemap, ipywidgets as widgets, datetime
 
-# 1️⃣ Authentification Google Earth Engine (GEE)
+# Authentification Google Earth Engine (GEE)
 ee.Authenticate()
 ee.Initialize(project='Nom_de_ton_projet_GEE')
 
 # ============================================================
 # 🔹 Paramètres utilisateur à remplir
 # ============================================================
-zone = ee.FeatureCollection('projects/Nom_de_ton_projet_GEE/assets/mask_gazientep')
-footprints = ee.FeatureCollection('projects/Nom_de_ton_projet_GEE/assets/bulding_gazientep')
-pre_date = '2023-02-05'
-event_date = '2023-02-06'
-pre_interval = 6
-post_interval = 1
-export_dir = 'PWTT_TURQUIE_Export'
-export_name = 'Gazientep_damage'
-export_footprint_csv = False
-export_footprint_geojson = False
-export_grid = False
-export_raster = False
-export_scale = 500
-urban_threshold = 0.1
-T_threshold = 3
-apply_terrain_flattening = False
-TERRAIN_FLATTENING_MODEL = 'VOLUME'
-DEM = ee.Image('USGS/SRTMGL1_003')
-TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER = 0
-show_raster = True
-show_footprints = False
+# ============================================================
+# 🔹 Paramètres utilisateur à remplir
+# ============================================================
+
+zone = ee.FeatureCollection(
+    'projects/Nom_de_ton_projet_GEE/assets/mask_gazientep'
+)  
+# Zone d’étude (AOI) : polygone qui délimite la zone analysée
+
+footprints = ee.FeatureCollection(
+    'projects/Nom_de_ton_projet_GEE/assets/bulding_gazientep'
+)  
+# Couche de bâtiments / objets (footprints OSM ou équivalent)
+
+pre_date = '2023-02-05'  
+# Date de référence AVANT l’événement (fin de la période pré-event)
+
+event_date = '2023-02-06'  
+# Date de l’événement ou début de la période post-event
+
+pre_interval = 6  
+# Nombre de mois AVANT pre_date utilisés pour calculer la situation normale
+
+post_interval = 1  
+# Nombre de mois APRÈS event_date utilisés pour détecter les changements
+
+export_dir = 'PWTT_TURQUIE_Export'  
+# Nom du dossier créé sur Google Drive pour stocker les résultats
+
+export_name = 'Gazientep_damage'  
+# Nom de base des fichiers exportés (CSV, GeoJSON, raster)
+
+export_footprint_csv = False  
+# True → export des résultats par bâtiment en CSV
+
+export_footprint_geojson = False  
+# True → export des résultats par bâtiment en GeoJSON
+
+export_grid = False  
+# True → export d’une grille régulière (CSV) couvrant la zone d’étude
+
+export_raster = False  
+# True → export du raster final T_statistic
+
+export_scale = 500  
+# Résolution du raster exporté (en mètres, ex : 10, 30, 100, 500)
+
+urban_threshold = 0.1  
+# Seuil d’urbanisation (Dynamic World) :  
+# plus la valeur est élevée, plus on se limite aux zones fortement bâties
+
+T_threshold = 3  
+# Seuil du T-statistic au-dessus duquel un pixel est considéré comme "changé"
+
+apply_terrain_flattening = False  
+# True → corrige les effets de relief (pentes, ombres radar)  
+# À activer surtout en zone montagneuse
+
+TERRAIN_FLATTENING_MODEL = 'VOLUME'  
+# Modèle de correction topographique :  
+# 'VOLUME' (recommandé) ou 'DIRECT'
+
+DEM = ee.Image('USGS/SRTMGL1_003')  
+# Modèle Numérique de Terrain utilisé pour la correction topographique
+
+TERRAIN_FLATTENING_ADDITIONAL_LAYOVER_SHADOW_BUFFER = 0  
+# Buffer supplémentaire (en mètres) pour élargir les zones masquées  
+# liées aux ombres et aux effets radar
+
+show_raster = True  
+# True → affiche la carte raster T_statistic dans Colab
+
+show_footprints = False  
+# True → affiche les bâtiments :  
+# vert = pas de dommage, rouge = dommage (contours uniquement)
+
 
 # ============================================================
 # 🔹 Appel de la fonction filter_s1
