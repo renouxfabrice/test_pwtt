@@ -88,22 +88,22 @@ spec = importlib.util.spec_from_file_location("pwtt", pwtt_path)
 pwtt = importlib.util.module_from_spec(spec)
 sys.modules["pwtt"] = pwtt
 spec.loader.exec_module(pwtt)
-print("🚀 Module pwtt chargé avec succès !")
+print("Module pwtt chargé avec succès !")
 
 # ============================================================
 # 🔹 Imports nécessaires
 # ============================================================
 import ee, geemap, ipywidgets as widgets, datetime
 
-# 1️⃣ Authentification Google Earth Engine
+# 1️⃣ Authentification Google Earth Engine (GEE)
 ee.Authenticate()
-ee.Initialize(project='pwtt-test')
+ee.Initialize(project='Nom_de_ton_projet_GEE')
 
 # ============================================================
 # 🔹 Paramètres utilisateur à remplir
 # ============================================================
-zone = ee.FeatureCollection('projects/pwtt-test/assets/mask_gazientep')
-footprints = ee.FeatureCollection('projects/pwtt-test/assets/bulding_gazientep')
+zone = ee.FeatureCollection('projects/Nom_de_ton_projet_GEE/assets/mask_gazientep')
+footprints = ee.FeatureCollection('projects/Nom_de_ton_projet_GEE/assets/bulding_gazientep')
 pre_date = '2023-02-05'
 event_date = '2023-02-06'
 pre_interval = 6
