@@ -46,7 +46,7 @@ L’objectif est de **tester la méthode dans des contextes civils et académiqu
 
 ## Utilisation dans Google Colab
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/renouxfabrice/test_pwtt/code/pwtt_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/renouxfabrice/test_pwtt/blob/main/code/pwtt_colab.ipynb)
 
 ### Étapes pour l’utilisateur
 ---
